@@ -1,0 +1,1 @@
+nightmare-depths  ->  npm run android:sync   (horror FPS PWA; builds icons, cap sync android, patches landscape + immersive + launcher icon; first time: npm install, npm run android:add)

@@ -1,0 +1,9 @@
+{
+  "appId": "com.reaper357.nightmaredepths",
+  "appName": "Nightmare Depths",
+  "webDir": "www",
+  "backgroundColor": "#000000",
+  "android": {
+    "allowMixedContent": false
+  }
+}
