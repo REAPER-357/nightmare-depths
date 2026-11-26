@@ -34,6 +34,9 @@ svg.ic{width:1.2em;height:1.2em;vertical-align:-.2em;fill:none;stroke:currentCol
 #btnPause{width:42px;height:42px;left:calc(8px + env(safe-area-inset-left));top:8px}
 
 /* ---------- screens ---------- */
+#rotate{display:none;position:fixed;inset:0;z-index:200;background:#000;color:#c9a35a;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;font-size:20px;letter-spacing:.06em}
+#rotate small{font-size:13px;color:#8a6a5a}
+@media (orientation:portrait) and (pointer:coarse){#rotate{display:flex}}
 #screen{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.84);overflow-y:auto;touch-action:pan-y;padding:10px}
 #screen *{touch-action:pan-y}
 #screen.clear{background:rgba(0,0,0,.35)}
@@ -135,6 +138,7 @@ input[type=checkbox]{width:22px;height:22px;accent-color:#c23a22}
 </div>
 <div id="toast"></div>
 <div id="screen" class="hidden"></div>
+<div id="rotate"><svg viewBox="0 0 64 64" width="84" height="84" fill="none" stroke="#c9a35a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="20" y="6" width="24" height="40" rx="4"/><path d="M32 41h0"/><path d="M10 50a24 24 0 0 0 40 8"/><path d="M52 52l-2 7-7-2"/></svg><div>Rotate your device<br><small>Nightmare Depths plays in landscape</small></div></div>
 <div id="loading"><div>Summoning</div><div class="bar"><i></i></div></div>
 <script>
 'use strict';
@@ -160,6 +164,7 @@ const fmtT = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padSta
 
 /* ---------------- inline SVG icon sprite (no network, no packs) ---------------- */
 const ICONS = {
+  infinity: '<path d="M12 12c-2-3-3.5-4-5.5-4a4 4 0 0 0 0 8c2 0 3.5-1 5.5-4zm0 0c2 3 3.5 4 5.5 4a4 4 0 0 0 0-8c-2 0-3.5 1-5.5 4z"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   medkit: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M12 10v7M8.5 13.5h7M9 7V5h6v2"/>',
   swap: '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
@@ -266,8 +271,8 @@ const SAVE_KEY = 'nightmare_depths_save_v1';
 function defSave() {
   return {
     credits: 0, wP: 0, wS: 0, up: { dmg: 0, spd: 0, def: 0, hp: 0 }, fak: 1, light: 0,
-    aP: 12, aS: 24, reached: 1, lv: {}, kills: 0, deaths: 0, best: 0, loot: 0,
-    set: { sens: 1, vol: 0.85, q: 3, shake: 1, inv: 0, aim: 1, gamma: 0.92, touch: 2 },
+    aP: 12, aS: 24, reached: 1, lv: {}, endless: {}, kills: 0, deaths: 0, best: 0, loot: 0,
+    set: { sens: 1, vol: 0.85, q: 3, shake: 1, inv: 0, aim: 1, gamma: 0.92, touch: 2, fs: 1 },
   };
 }
 let SV = defSave();
@@ -1011,9 +1016,9 @@ function bfsGrid(map, W, H, sx, sy, passable) {
   return { dist, par };
 }
 
-function genLevel(L, seed) {
+function genLevel(L, seed, themeO) {
   const rr = mulberry(seed), rn = (a, b) => a + Math.floor(rr() * (b - a + 1));
-  const theme = themeOf(L), angelLevel = L % 10 === 0;
+  const theme = themeO != null ? themeO : themeOf(L), angelLevel = L % 10 === 0;
   let size = Math.min(31 + Math.floor(L * 0.8), 61); if (size % 2 === 0) size++;
   const W = size, H = size, map = new Uint8Array(W * H).fill(1);
   const idx = (x, y) => y * W + x;
@@ -1158,7 +1163,7 @@ function genLevel(L, seed) {
 
 /* ===================== GAME STATE & LOGIC ===================== */
 const IN = { fw: 0, st: 0, dyaw: 0, dpitch: 0, fire: false, fireEdge: false, touch: false };
-const G = { state: 'boot', L: 1, lv: null, map: null, W: 0, H: 0, doorT: null, doors: {}, doorList: [], ents: [], items: [], proj: [], corpses: [], fxe: [], explored: null, time: 0, kills: 0, deaths: 0, lootN: 0, lootVal: 0, killCred: 0, trail: [], flow: null, flowT: 0, flowCell: -1, evT: 6, fx: { flash: 0, flashCol: '255,255,255', shake: 0, hurt: 0, scare: 0 }, deadT: 0, msg: '', diedThisLevel: 0, hbT: 0, last: null, noise: 0, revealT: 0, doneInfo: null, startedAt: 0 };
+const G = { state: 'boot', L: 1, lv: null, map: null, W: 0, H: 0, doorT: null, doors: {}, doorList: [], ents: [], items: [], proj: [], corpses: [], fxe: [], explored: null, time: 0, kills: 0, deaths: 0, lootN: 0, lootVal: 0, killCred: 0, trail: [], flow: null, flowT: 0, flowCell: -1, evT: 6, fx: { flash: 0, flashCol: '255,255,255', shake: 0, hurt: 0, scare: 0 }, deadT: 0, msg: '', diedThisLevel: 0, hbT: 0, last: null, noise: 0, revealT: 0, doneInfo: null, startedAt: 0, mode: 'campaign', realm: 0, runScore: 0, runKills: 0 };
 const P = { x: 2, y: 2, a: 0, pitch: 0, hp: 100, maxhp: 100, fak: 0, keys: { M: 0, A: 0, B: 0 }, cur: 0, mag: [0, 0], reload: 0, fireT: 0, swapT: 0, spin: 0, bob: 0, stepD: 0, flick: 0, muzzle: 0, kick: 0, fakT: 0, beam: 0, room: -1, speedNow: 0, hurtSnd: 0, lockMsgT: 0, gateMsgT: 0 };
 
 const toastEl = () => $('toast');
@@ -1223,7 +1228,7 @@ function flowTarget(e) {
 /* ---------- level setup ---------- */
 function startLevel(L, menu) {
   if (!menu) { auInit(); aSetVol(); }
-  G.L = L; const lv = genLevel(L, ((Date.now() & 0xfffff) * 7 + L * 131) >>> 0);
+  G.L = L; const lv = genLevel(L, ((Date.now() & 0xfffff) * 7 + L * 131) >>> 0, G.mode === 'endless' ? G.realm : null);
   G.lv = lv; G.map = lv.map; G.W = lv.W; G.H = lv.H; G.doorT = new Float32Array(lv.W * lv.H); G.doors = {}; G.doorList = lv.doorCells.slice();
   for (const i of G.doorList) { const v = G.map[i]; G.doors[i] = { locked: v === 6 || v === 7, kind: v, hold: 0, perm: false, state: 0 }; }
   G.explored = new Uint8Array(lv.W * lv.H); G.ents = []; G.proj = []; G.corpses = []; G.fxe = [];
@@ -1575,18 +1580,30 @@ function updateGame(dt) {
 /* ---------- level result ---------- */
 function finishLevel() {
   if (G.state !== 'play') return;
-  G.state = 'done'; ambStop(); SND.win(); IN.fire = false;
+  G.state = 'done'; ambStop(); SND.win(); IN.fire = false; try { document.exitPointerLock(); } catch (e) {}
   const L = G.L, t = G.time, par = 100 + L * 8 + G.lv.rooms.length * 6;
   const base = 60 + 12 * L, killC = Math.round(G.killCred), lootC = Math.round(G.lootVal), timeB = Math.round(Math.max(0, 1 - t / (par * 2)) * (80 + 15 * L));
   const sub = base + killC + lootC + timeB, pen = Math.min(0.4, 0.06 * G.deaths), credits = Math.round(sub * (1 - pen));
   const score = Math.max(0, Math.round(credits * 10 + G.kills * 50 + G.lootN * 250 - G.deaths * 300));
-  SV.credits += credits; SV.reached = Math.max(SV.reached, L + 1); SV.loot += G.lootN;
+  SV.credits += credits; SV.loot += G.lootN;
+  const endless = G.mode === 'endless';
+  let isBest = false, runBest = false;
+  if (endless) {
+    G.runScore += score; G.runKills += G.kills;
+    const e = SV.endless[G.realm] || (SV.endless[G.realm] = { score: 0, depth: 0, kills: 0, runs: 0 }), depth = L - G.realm * 10;
+    if (G.runScore > e.score) { e.score = G.runScore; runBest = true; }
+    if (depth > e.depth) e.depth = depth;
+    if (G.runKills > e.kills) e.kills = G.runKills;
+    saveGame();
+  } else {
+  SV.reached = Math.min(41, Math.max(SV.reached, L + 1));
   const key = String(L), old = SV.lv[key], rec = { score, money: credits, kills: G.kills, deaths: G.deaths, time: Math.round(t), loot: G.lootN, runs: (old ? old.runs : 0) + 1, bestTime: old ? Math.min(old.bestTime || 9999, Math.round(t)) : Math.round(t) };
-  const isBest = !old || score > old.score;
+  isBest = !old || score > old.score;
   SV.lv[key] = isBest ? rec : Object.assign({}, old, { runs: rec.runs, bestTime: rec.bestTime });
   if (score > SV.best) SV.best = score;
   saveGame();
-  G.doneInfo = { L, t, par, base, killC, lootC, timeB, pen, credits, score, kills: G.kills, deaths: G.deaths, lootN: G.lootN, lootTotal: G.lv.items.filter((i) => i.t === 'loot').length, isBest };
+  }
+  G.doneInfo = { mode: G.mode, realm: G.realm, theme: G.lv.theme, runScore: G.runScore, runBest, L, t, par, base, killC, lootC, timeB, pen, credits, score, kills: G.kills, deaths: G.deaths, lootN: G.lootN, lootTotal: G.lv.items.filter((i) => i.t === 'loot').length, isBest };
   setTimeout(() => showDone(), 900);
 }
 
@@ -1821,46 +1838,75 @@ function drawMap(canvas, big) {
 
 /* ===================== UI, INPUT, MAIN LOOP ===================== */
 const scr = $('screen');
-function show(html, cls) { scr.className = cls || ''; scr.innerHTML = html; scr.scrollTop = 0; }
+function show(html, cls) { if (cls !== 'clear') { try { document.exitPointerLock(); } catch (e) {} } scr.className = cls || ''; scr.innerHTML = html; scr.scrollTop = 0; }
 function hideScreen() { scr.className = 'hidden'; scr.innerHTML = ''; }
 const btn = (a, label, icon, extra, cls) => `<button class="btn ${cls || ''}" data-a="${a}" ${extra || ''}>${icon ? ic(icon) : ''}<span>${label}</span></button>`;
 const secName = (L) => THEMES[themeOf(L)].name;
+const lvLabel = () => G.mode === 'endless' ? 'Endless depth ' + (G.L - G.realm * 10) : 'Level ' + G.L;
+const nextLabel = () => (G.mode === 'campaign' && G.L >= 40 ? 'Campaign Results' : G.mode === 'endless' ? 'Descend Deeper' : 'Next Level');
+const realmOpen = (i) => i === 0 || SV.reached > 10 * i;
+function campTotals() {
+  const t = { cleared: 0, score: 0, money: 0, kills: 0, deaths: 0, loot: 0, time: 0, realm: [0, 1, 2, 3].map(() => ({ cleared: 0, score: 0, kills: 0, deaths: 0, loot: 0 })) };
+  for (let L = 1; L <= 40; L++) { const r = SV.lv[L]; if (!r) continue; t.cleared++; t.score += r.score; t.money += r.money; t.kills += r.kills; t.deaths += r.deaths; t.loot += r.loot || 0; t.time += r.bestTime || r.time || 0; const q = t.realm[Math.floor((L - 1) / 10)]; q.cleared++; q.score += r.score; q.kills += r.kills; q.deaths += r.deaths; q.loot += r.loot || 0; }
+  return t;
+}
 
 /* ---------------- screens ---------------- */
 function showTitle() {
   G.state = 'menu'; $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
-  const L = Math.max(1, SV.reached);
+  const done = SV.reached > 40, L = Math.min(40, Math.max(1, SV.reached));
   show(`<div class="panel center">
     <h1 class="title">NIGHTMARE<span>D E P T H S</span></h1>
     <p class="dim">Find the key. Reach the gate. Do not look away.</p>
     <div class="credits">${ic('coin')} ${fmt(SV.credits)} credits</div>
-    ${btn('play', `${SV.reached > 1 ? 'Continue' : 'Descend'} &mdash; Level ${L}`, 'play', `data-l="${L}"`)}
-    <div class="row">${btn('levels', 'Level Select', 'skull')}${btn('shop', 'Armoury', 'shop', 'data-ctx="menu"')}</div>
+    ${done ? btn('results', 'Campaign Complete &mdash; Results', 'trophy') : btn('play', `${SV.reached > 1 ? 'Continue' : 'Descend'} &mdash; Level ${L}`, 'play', `data-l="${L}"`)}
+    <div class="row">${btn('levels', done ? 'Realms &amp; Endless' : 'Level Select', 'skull')}${btn('shop', 'Armoury', 'shop', 'data-ctx="menu"')}</div>
     <div class="row">${btn('records', 'Records', 'trophy')}${btn('settings', 'Settings', 'gear')}${btn('help', 'How to Play', 'book')}</div>
-    <p class="dim">Highest level reached: ${Math.max(1, SV.reached)} &nbsp;|&nbsp; Best score: ${fmt(SV.best)}</p>
+    <p class="dim">Campaign: level ${Math.min(40, Math.max(1, SV.reached))} of 40 &nbsp;|&nbsp; Best score: ${fmt(SV.best)}</p>
   </div>`);
 }
 function showLevels() {
-  let h = '<div class="panel wide"><h2>Level Select</h2><div class="row" style="gap:6px">';
-  const max = Math.max(1, SV.reached);
-  for (let L = 1; L <= max; L++) {
-    const r = SV.lv[L], th = THEMES[themeOf(L)];
-    h += `<button class="btn small" style="flex:1 1 150px;flex-direction:column;gap:2px;margin:3px" data-a="play" data-l="${L}"><b style="font-size:18px">${L}${L % 10 === 0 ? ' ' + ic('eye') : ''}</b><span style="font-size:10px;letter-spacing:.08em">${th.short}</span><span style="font-size:10px;color:#c9a35a">${r ? fmt(r.score) : 'unplayed'}</span></button>`;
+  let h = '<div class="panel wide"><h2>Level Select</h2><p class="dim center" style="margin-top:-4px">Main campaign: 40 levels across four realms</p>';
+  for (let i = 0; i < 4; i++) {
+    const th = THEMES[i], open = realmOpen(i), first = i * 10 + 1, last = Math.min(i * 10 + 10, SV.reached, 40), e = SV.endless[i];
+    h += `<div style="border:1px solid ${open ? '#521010' : '#2a1414'};margin:10px 0;padding:8px 10px;border-radius:4px;opacity:${open ? 1 : 0.65}"><h3 style="margin:0 0 4px">${ic(open ? 'skull' : 'lock')} ${th.name} <small style="color:#a78c76">Levels ${first}&ndash;${first + 9}</small></h3>`;
+    if (!open) {
+      h += `<p class="dim" style="margin:4px 0">Locked &mdash; unlock in the main campaign by completing Level ${i * 10}.</p></div>`; continue;
+    }
+    h += '<div class="row" style="gap:6px">';
+    for (let L = first; L <= last; L++) {
+      const r = SV.lv[L];
+      h += `<button class="btn small" style="flex:1 1 110px;flex-direction:column;gap:2px;margin:3px" data-a="play" data-l="${L}"><b style="font-size:18px">${L}${L % 10 === 0 ? ' ' + ic('eye') : ''}</b><span style="font-size:10px;color:#c9a35a">${r ? fmt(r.score) : 'unplayed'}</span></button>`;
+    }
+    h += `</div><div class="row" style="margin-top:6px">${btn('endless', 'Endless &mdash; ' + th.short, 'infinity', `data-r="${i}"`)}</div><p class="dim" style="margin:4px 0;font-size:12px">${e ? 'Endless best: ' + fmt(e.score) + ' pts, depth ' + e.depth + ', ' + e.kills + ' kills' : 'Endless: no run yet. Survive as deep as you can.'}</p></div>`;
   }
-  h += `</div>${btn('title', 'Back', 'back')}</div>`; show(h, '');
+  h += `${SV.reached > 40 ? btn('results', 'Campaign Results', 'trophy') : ''}${btn('title', 'Back', 'back')}</div>`; show(h, '');
+}
+function showResults() {
+  const t = campTotals(), all = t.cleared >= 40, row = (a, b) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`;
+  let rr = ''; t.realm.forEach((q, i) => { rr += `<tr><td>${THEMES[i].short}</td><td>${q.cleared}/10</td><td>${fmt(q.score)}</td><td>${q.kills}</td><td>${q.deaths}</td><td>${q.loot}</td></tr>`; });
+  let en = ''; for (let i = 0; i < 4; i++) { const e = SV.endless[i]; if (e) en += row('Endless ' + THEMES[i].short, fmt(e.score) + ' pts &middot; depth ' + e.depth); }
+  show(`<div class="panel wide"><h2>${all ? 'Campaign Complete' : 'Campaign Results'}</h2>
+    ${all ? '<p class="center" style="color:#f2c264">You reached the end of the Nightmare. Replay levels to beat your best.</p>' : '<p class="center dim">Best run of each level, added up.</p>'}
+    <div class="big">TOTAL SCORE ${fmt(t.score)}</div>
+    ${row('Levels cleared', t.cleared + ' / 40')}${row('Money earned', fmt(t.money))}${row('Enemies slain', fmt(t.kills))}${row('Deaths', fmt(t.deaths))}${row('Relics recovered', fmt(t.loot))}${row('Total best time', fmtT(t.time))}
+    <h3>By realm</h3><table><tr><th>Realm</th><th>Cleared</th><th>Score</th><th>Kills</th><th>Deaths</th><th>Relics</th></tr>${rr}</table>
+    ${en ? '<h3>Endless bests</h3>' + en : ''}
+    <div class="row" style="margin-top:12px">${btn('levels', 'Level Select', 'skull')}${btn('title', 'Main Menu', 'home')}</div></div>`);
 }
 function showRecords() {
   const keys = Object.keys(SV.lv).map(Number).sort((a, b) => a - b);
   let rows = ''; keys.forEach((L) => { const r = SV.lv[L]; rows += `<tr><td>${L}</td><td>${THEMES[themeOf(L)].short}</td><td>${fmt(r.score)}</td><td>${fmt(r.money)}</td><td>${r.kills}</td><td>${r.deaths}</td><td>${fmtT(r.bestTime || r.time)}</td></tr>`; });
   show(`<div class="panel wide"><h2>Records &amp; Progress</h2>
-    <div class="stat"><span>Deepest level reached</span><b>${Math.max(1, SV.reached)}</b></div>
+    <div class="stat"><span>Campaign progress</span><b>Level ${Math.min(40, Math.max(1, SV.reached))} / 40</b></div>
     <div class="stat"><span>Best single-level score</span><b>${fmt(SV.best)}</b></div>
     <div class="stat"><span>Total enemies slain</span><b>${fmt(SV.kills)}</b></div>
     <div class="stat"><span>Total deaths</span><b>${fmt(SV.deaths)}</b></div>
     <div class="stat"><span>Relics recovered</span><b>${fmt(SV.loot)}</b></div>
+    ${[0, 1, 2, 3].filter((i) => SV.endless[i]).map((i) => `<div class="stat"><span>Endless ${THEMES[i].short} best</span><b>${fmt(SV.endless[i].score)} &middot; depth ${SV.endless[i].depth}</b></div>`).join('')}
     <h3>Best run per level</h3>
     ${keys.length ? `<table><tr><th>Lvl</th><th>Realm</th><th>Score</th><th>Money</th><th>Kills</th><th>Deaths</th><th>Time</th></tr>${rows}</table>` : '<p class="dim center">No levels completed yet.</p>'}
-    ${btn('title', 'Back', 'back')}</div>`);
+    <div class="row" style="margin-top:12px">${btn('results', 'Campaign Totals', 'trophy')}${btn('title', 'Back', 'back')}</div></div>`);
 }
 function showSettings(fromPause) {
   const s = SV.set;
@@ -1871,6 +1917,7 @@ function showSettings(fromPause) {
     <label class="set">Screen shake<input type="range" min="0" max="1.5" step="0.1" value="${s.shake}" data-set="shake"></label>
     <label class="set">Graphics<select data-set="q"><option value="0" ${s.q === 0 ? 'selected' : ''}>Low</option><option value="1" ${s.q === 1 ? 'selected' : ''}>Medium</option><option value="2" ${s.q === 2 ? 'selected' : ''}>High</option><option value="3" ${s.q === 3 ? 'selected' : ''}>Auto</option></select></label>
     <label class="set">Touch controls<select data-set="touch"><option value="2" ${s.touch === 2 ? 'selected' : ''}>Auto</option><option value="1" ${s.touch === 1 ? 'selected' : ''}>Always on</option><option value="0" ${s.touch === 0 ? 'selected' : ''}>Off</option></select></label>
+    <label class="set">Auto fullscreen + landscape<input type="checkbox" data-set="fs" ${s.fs ? 'checked' : ''}></label>
     <label class="set">Invert look (Y)<input type="checkbox" data-set="inv" ${s.inv ? 'checked' : ''}></label>
     <label class="set">Touch aim assist<input type="checkbox" data-set="aim" ${s.aim ? 'checked' : ''}></label>
     <div class="row">${btn('fs', 'Fullscreen', 'play')}${fromPause ? '' : btn('reset', 'Erase Progress', 'close')}</div>
@@ -1888,7 +1935,7 @@ function showPause() {
   show(`<div class="panel center"><h2>Paused</h2>${btn('resume', 'Resume', 'play')}${btn('map', 'Map', 'map')}${btn('settingsP', 'Settings', 'gear')}${btn('quit', 'Abandon Level', 'home')}</div>`);
 }
 function showMap() {
-  show(`<div class="panel wide center" style="padding:10px"><h2 style="margin-bottom:6px">${secName(G.L)} &mdash; Level ${G.L}</h2>
+  show(`<div class="panel wide center" style="padding:10px"><h2 style="margin-bottom:6px">${THEMES[G.lv.theme].name} &mdash; ${lvLabel()}</h2>
     <canvas id="bigmap" width="640" height="640" style="width:min(60vh,90vw);height:min(60vh,90vw);background:#000;border:1px solid #521010;touch-action:none"></canvas>
     <p class="dim">${ic('key')} keys &nbsp; <span style="color:#5ad0ff">&#9632;</span> relics &nbsp; <span style="color:#e03a2a">&#9632;</span> gate &nbsp; <span style="color:#d08a4a">&#9632;</span> bronze door &nbsp; <span style="color:#3ad08a">&#9632;</span> jade door</p>
     ${btn('resume', 'Close Map', 'close')}</div>`);
@@ -1898,13 +1945,13 @@ function showDead() { show(`<div class="center"><div class="big" style="font-siz
 function showDone() {
   const d = G.doneInfo; if (!d) return; G.state = 'done'; $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
   const row = (a, b) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`;
-  show(`<div class="panel"><h2>Level ${d.L} Complete</h2>
-    <p class="center dim">${secName(d.L)} &middot; time ${fmtT(d.t)} (par ${fmtT(d.par)})</p>
+  show(`<div class="panel"><h2>${d.mode === 'endless' ? 'Depth ' + (d.L - d.realm * 10) : 'Level ' + d.L} Complete</h2>
+    <p class="center dim">${THEMES[d.theme].name} &middot; time ${fmtT(d.t)} (par ${fmtT(d.par)})</p>
     ${row('Survival bonus', fmt(d.base))}${row('Kills (' + d.kills + ')', fmt(d.killC))}${row('Relics (' + d.lootN + '/' + d.lootTotal + ')', fmt(d.lootC))}${row('Time bonus', fmt(d.timeB))}
     ${d.deaths ? row('Deaths (' + d.deaths + ') penalty', '-' + Math.round(d.pen * 100) + '%') : ''}
     <div class="credits" style="margin-top:12px">${ic('coin')} +${fmt(d.credits)} credits</div>
-    <div class="big">SCORE ${fmt(d.score)}</div>${d.isBest ? '<p class="center" style="color:#f2c264">New best for this level!</p>' : ''}
-    <div class="row">${btn('shop', 'Armoury', 'shop', 'data-ctx="done"')}${btn('next', 'Next Level', 'play')}</div>${btn('title', 'Main Menu', 'home')}</div>`);
+    <div class="big">SCORE ${fmt(d.score)}</div>${d.mode === 'endless' ? `<div class="stat"><span>Run score</span><b>${fmt(d.runScore)}</b></div>${d.runBest ? '<p class="center" style="color:#f2c264">New endless best!</p>' : ''}` : ''}${d.isBest ? '<p class="center" style="color:#f2c264">New best for this level!</p>' : ''}
+    <div class="row">${btn('shop', 'Armoury', 'shop', 'data-ctx="done"')}${btn('next', nextLabel(), 'play')}</div>${btn('title', 'Main Menu', 'home')}</div>`);
 }
 
 /* ---------------- shop ---------------- */
@@ -1935,21 +1982,21 @@ function showShop() {
     h += `<h3>Light</h3>`;
     LIGHTS.forEach((l, i) => { const ico = ['flame', 'glow', 'flash', 'flash'][i]; let b; if (i < SV.light) b = '<div class="buy max">Replaced</div>'; else if (i === SV.light) b = '<div class="buy max">Equipped</div>'; else b = buyBtn('buyL', `data-i="${i}"`, l.cost, SV.credits >= l.cost); h += item(ico, l.name, l.desc + ' Range ' + l.range + 'm.', b); });
   }
-  h += `<div class="row" style="margin-top:12px">${shopCtx === 'done' ? btn('next', 'Next Level', 'play') : ''}${btn(shopCtx === 'done' ? 'title' : 'title', shopCtx === 'done' ? 'Main Menu' : 'Back', shopCtx === 'done' ? 'home' : 'back')}</div></div>`;
+  h += `<div class="row" style="margin-top:12px">${shopCtx === 'done' ? btn('next', nextLabel(), 'play') : ''}${btn(shopCtx === 'done' ? 'title' : 'title', shopCtx === 'done' ? 'Main Menu' : 'Back', shopCtx === 'done' ? 'home' : 'back')}</div></div>`;
   const keep = scr.scrollTop; show(h); scr.scrollTop = keep;
 }
 const ACT = {
-  play: (d) => playLevel(+d.l), levels: showLevels, title: showTitle, records: showRecords, settings: () => showSettings(false), settingsP: () => showSettings(true), help: showHelp,
+  play: (d) => playLevel(+d.l, 'campaign', 0), endless: (d) => { const r = +d.r; if (!realmOpen(r)) return; G.runScore = 0; G.runKills = 0; playLevel(r * 10 + 1, 'endless', r); }, results: showResults, levels: showLevels, title: showTitle, records: showRecords, settings: () => showSettings(false), settingsP: () => showSettings(true), help: showHelp,
   shop: (d) => { shopCtx = d.ctx || 'menu'; shopTab = 'w'; showShop(); }, tab: (d) => { shopTab = d.t; showShop(); },
   buyW: (d) => { const slot = +d.s, i = +d.i, arr = WSLOT[slot], w = arr[i], cur = slot ? SV.wS : SV.wP; if (i !== cur + 1 || SV.credits < w.cost) return; SV.credits -= w.cost; if (slot) { SV.wS = i; SV.aS = w.inf ? 0 : Math.min(w.cap, w.pk * 3); } else { SV.wP = i; SV.aP = w.inf ? 0 : Math.min(w.cap, w.pk * 3); } SND.buy(); saveGame(); showShop(); },
   buyU: (d) => { const u = UPS.find((x) => x.k === d.k), lvl = SV.up[u.k], c = upCost(u, lvl); if (lvl >= u.max || SV.credits < c) return; SV.credits -= c; SV.up[u.k]++; SND.buy(); saveGame(); showShop(); },
   buyS: (d) => { const id = d.id; if (id === 'fak') { if (SV.fak >= 9 || SV.credits < 120) return; SV.credits -= 120; SV.fak++; } else if (id === 'ap') { const w = wOf(0); if (w.inf || SV.aP >= w.cap || SV.credits < 90) return; SV.credits -= 90; SV.aP = Math.min(w.cap, SV.aP + Math.max(w.pk, 1) * 2); } else { const w = wOf(1); if (w.inf || SV.aS >= w.cap || SV.credits < 70) return; SV.credits -= 70; SV.aS = Math.min(w.cap, SV.aS + Math.max(w.pk, 1) * 2); } SND.buy(); saveGame(); showShop(); },
   buyL: (d) => { const i = +d.i, l = LIGHTS[i]; if (i <= SV.light || SV.credits < l.cost) return; SV.credits -= l.cost; SV.light = i; SND.buy(); saveGame(); showShop(); },
-  next: () => playLevel(G.L + 1), resume: resumeGame, pausemenu: showPause, map: () => { G.state = 'map'; showMap(); },
-  quit: () => { saveGame(); toMenu(); }, fs: () => { try { (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement); } catch (e) {} },
+  next: () => { if (G.mode === 'endless') playLevel(G.L + 1, 'endless', G.realm); else if (G.L >= 40) showResults(); else playLevel(G.L + 1, 'campaign', 0); }, resume: resumeGame, pausemenu: showPause, map: () => { G.state = 'map'; showMap(); },
+  quit: () => { saveGame(); toMenu(); }, fs: () => enterFS(true),
   reset: () => { if (confirm('Erase ALL progress, credits and records?')) { SV = defSave(); saveGame(); showTitle(); } },
 };
-scr.addEventListener('click', (e) => { const b = e.target.closest('[data-a]'); if (!b) return; auInit(); aSetVol(); SND.ui(); const f = ACT[b.dataset.a]; if (f) f(b.dataset); });
+scr.addEventListener('click', (e) => { const b = e.target.closest('[data-a]'); if (!b) return; if (IN.touch) enterFS(); auInit(); aSetVol(); SND.ui(); const f = ACT[b.dataset.a]; if (f) f(b.dataset); });
 scr.addEventListener('input', (e) => {
   const k = e.target.dataset && e.target.dataset.set; if (!k) return;
   let v = e.target.type === 'checkbox' ? (e.target.checked ? 1 : 0) : parseFloat(e.target.value); SV.set[k] = v; saveGame();
@@ -1957,19 +2004,28 @@ scr.addEventListener('input', (e) => {
 });
 
 /* ---------------- flow ---------------- */
-function playLevel(L) {
+function lockPtr() { try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+function enterFS(force) {
+  if (!force && !SV.set.fs) return;
+  const d = document.documentElement, isFS = document.fullscreenElement || document.webkitFullscreenElement;
+  const lock = () => { try { const o = screen.orientation; if (o && o.lock) o.lock('landscape').catch(() => {}); } catch (e) {} };
+  if (isFS) { lock(); return; }
+  try { const fn = d.requestFullscreen || d.webkitRequestFullscreen; if (fn) { const p = fn.call(d, { navigationUI: 'hide' }); if (p && p.then) p.then(lock, () => {}); else lock(); } } catch (e) {}
+}
+function playLevel(L, mode, realm) {
+  G.mode = mode || 'campaign'; G.realm = realm || 0; enterFS();
   hideScreen(); auInit(); aSetVol(); startLevel(L); applyTouchMode();
   $('hud').classList.remove('hidden'); if (IN.touch) $('touch').classList.remove('hidden');
-  const ln = $('hLname'); ln.innerHTML = `LEVEL ${L}<small>${secName(L)}</small>`; ln.classList.add('on'); setTimeout(() => ln.classList.remove('on'), 3800);
+  const ln = $('hLname'); ln.innerHTML = `${G.mode === 'endless' ? 'ENDLESS &middot; DEPTH ' + (L - G.realm * 10) : 'LEVEL ' + L}<small>${THEMES[G.lv.theme].name}</small>`; ln.classList.add('on'); setTimeout(() => ln.classList.remove('on'), 3800);
   const hint = $('hHint'); hint.classList.remove('off'); hint.textContent = IN.touch ? 'Left thumb: move  |  Right thumb: look  |  Tap the minimap for the map' : 'WASD move | Mouse look | Click fire | R reload | Q swap | F medkit | M map';
   setTimeout(() => hint.classList.add('off'), 9000);
-  if (!IN.touch) try { cv.requestPointerLock(); } catch (e) {}
+  if (!IN.touch) lockPtr();
   lastHud = 0;
 }
 function pauseGame() { if (G.state !== 'play') return; G.state = 'paused'; IN.fire = false; releaseAllTouch(); try { document.exitPointerLock(); } catch (e) {} showPause(); try { if (AU.c) AU.c.suspend(); } catch (e) {} }
-function resumeGame() { try { if (AU.c) AU.c.resume(); } catch (e) {} if (G.state === 'paused' || G.state === 'map') { G.state = 'play'; hideScreen(); if (!IN.touch) try { cv.requestPointerLock(); } catch (e) {} } }
+function resumeGame() { try { if (AU.c) AU.c.resume(); } catch (e) {} if (G.state === 'paused' || G.state === 'map') { G.state = 'play'; hideScreen(); if (!IN.touch) lockPtr(); } }
 function toMenu() { ambStop(); try { if (AU.c) AU.c.resume(); } catch (e) {} buildMenuScene(); showTitle(); }
-function buildMenuScene() { startLevel(1, true); G.state = 'menu'; G.ents = []; G.proj = []; G.items = []; P.a = Math.random() * TAU; }
+function buildMenuScene() { G.mode = 'campaign'; G.realm = 0; startLevel(1, true); G.state = 'menu'; G.ents = []; G.proj = []; G.items = []; P.a = Math.random() * TAU; }
 function applyTouchMode() { const m = SV.set.touch; IN.touch = m === 1 || (m === 2 && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0)); if (!IN.touch) $('touch').classList.add('hidden'); else if (G.state === 'play') $('touch').classList.remove('hidden'); }
 
 /* ---------------- HUD ---------------- */
@@ -2018,6 +2074,7 @@ window.addEventListener('mouseup', (e) => { if (e.button === 0 && !touchFire) IN
 window.addEventListener('mousemove', (e) => { if (document.pointerLockElement === cv && G.state === 'play') { IN.dyaw += e.movementX * 0.0022 * SV.set.sens; IN.dpitch += -e.movementY * 0.0016 * SV.set.sens; } });
 window.addEventListener('wheel', (e) => { if (G.state === 'play') swapWeapon(); }, { passive: true });
 document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== cv && G.state === 'play' && !IN.touch) pauseGame(); });
+try { matchMedia('(orientation:portrait) and (pointer:coarse)').addEventListener('change', (e) => { if (e.matches && G.state === 'play') pauseGame(); }); } catch (e) {}
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') pauseGame(); });
 window.addEventListener('blur', () => { if (G.state === 'play') pauseGame(); });
 window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -2086,7 +2143,7 @@ function boot() {
   }, 30);
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
-window.__nd = { G, P, SV, startLevel, genLevel, playLevel, finishLevel, EN, hurtPlayer, damageEnemy, addEnemy, drawView, calcFlow };
+window.__nd = { G, P, SV, startLevel, genLevel, playLevel, finishLevel, EN, hurtPlayer, damageEnemy, addEnemy, drawView, calcFlow, showLevels, showResults, showTitle, showRecords };
 boot();
 
 </script>
