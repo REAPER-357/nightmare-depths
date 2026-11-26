@@ -280,10 +280,11 @@ function loadSave() {
   try {
     const j = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (j) {
-      const d = defSave();
+      const d = defSave(), up = d.up, set = d.set;
       SV = Object.assign(d, j);
-      SV.up = Object.assign(d.up, j.up || {});
-      SV.set = Object.assign(d.set, j.set || {});
+      SV.up = Object.assign(up, j.up || {});
+      SV.set = Object.assign(set, j.set || {});
+      if (!SV.endless) SV.endless = {};
     }
   } catch (e) {}
 }
