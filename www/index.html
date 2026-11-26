@@ -1855,7 +1855,7 @@ function campTotals() {
 /* ---------------- screens ---------------- */
 function showTitle() {
   G.state = 'menu'; $('hud').classList.add('hidden'); $('touch').classList.add('hidden');
-  const done = SV.reached > 40, L = Math.min(40, Math.max(1, SV.reached));
+  const done = SV.reached > 40, L = Math.min(40, Math.max(1, SV.reached)), ios = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
   show(`<div class="panel center">
     <h1 class="title">NIGHTMARE<span>D E P T H S</span></h1>
     <p class="dim">Find the key. Reach the gate. Do not look away.</p>
@@ -1863,6 +1863,7 @@ function showTitle() {
     ${done ? btn('results', 'Campaign Complete &mdash; Results', 'trophy') : btn('play', `${SV.reached > 1 ? 'Continue' : 'Descend'} &mdash; Level ${L}`, 'play', `data-l="${L}"`)}
     <div class="row">${btn('levels', done ? 'Realms &amp; Endless' : 'Level Select', 'skull')}${btn('shop', 'Armoury', 'shop', 'data-ctx="menu"')}</div>
     <div class="row">${btn('records', 'Records', 'trophy')}${btn('settings', 'Settings', 'gear')}${btn('help', 'How to Play', 'book')}</div>
+    ${ios ? '<p class="dim" style="color:#c9a35a;font-size:13px">Safari cannot go fullscreen from a web page. For true fullscreen: tap Share, then <b>Add to Home Screen</b>, and open Nightmare Depths from the icon.</p>' : ''}
     <p class="dim">Campaign: level ${Math.min(40, Math.max(1, SV.reached))} of 40 &nbsp;|&nbsp; Best score: ${fmt(SV.best)}</p>
   </div>`);
 }
@@ -2079,6 +2080,13 @@ try { matchMedia('(orientation:portrait) and (pointer:coarse)').addEventListener
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.state === 'play') pauseGame(); });
 window.addEventListener('blur', () => { if (G.state === 'play') pauseGame(); });
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+// Safari ignores user-scalable=no: block pinch and double-tap zoom by hand
+['gesturestart', 'gesturechange', 'gestureend'].forEach((n) => document.addEventListener(n, (e) => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', (e) => { if ((e.scale && e.scale !== 1) || (e.touches.length > 1 && !e.target.closest('#screen'))) e.preventDefault(); }, { passive: false });
+let lastTE = 0;
+document.addEventListener('touchend', (e) => { const n = Date.now(); if (n - lastTE < 350 && !e.target.closest('#screen')) e.preventDefault(); lastTE = n; }, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
 $('mini').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); if (G.state === 'play') { IN.fire = false; releaseAllTouch(); G.state = 'map'; try { document.exitPointerLock(); } catch (er) {} showMap(); } });
 
 /* ---------------- touch ---------------- */
